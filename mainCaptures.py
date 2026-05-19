@@ -11,9 +11,8 @@ from inference.predict import predict
 from inference.postprocess import process_output
 
 # =========================================================
-# CONFIGURAÇÕES
+# 1. CONFIGURAÇÕES DE DIRETÓRIOS
 # =========================================================
-
 BASE_DIR = "capturas"
 
 DIRS = {
@@ -23,7 +22,7 @@ DIRS = {
     "logs": os.path.join(BASE_DIR, "logs")
 }
 
-# Cria diretórios automaticamente
+# Cria diretórios automaticamente caso não existam
 for folder in DIRS.values():
     os.makedirs(folder, exist_ok=True)
 
@@ -31,9 +30,8 @@ SAVE_IMAGES = True
 SAVE_EVERY_N_FRAMES = 1
 
 # =========================================================
-# INICIALIZAÇÃO DA CÂMERA
+# 2. INICIALIZAÇÃO DA CÂMERA
 # =========================================================
-
 print("[INFO] Inicializando Picamera2...")
 
 picam2 = Picamera2()
@@ -49,47 +47,54 @@ picam2.configure(config)
 picam2.start()
 
 time.sleep(2)
-
 print("[INFO] Câmera iniciada!")
 
 # =========================================================
-# LOOP PRINCIPAL
+# 3. LOOP PRINCIPAL
 # =========================================================
-
 prev = time.time()
 frame_count = 0
 
 try:
     while True:
-
-        # 1. CAPTURA DO FRAME
+        # -------------------------------------------------
+        # CAPTURA
+        # -------------------------------------------------
         frame_rgb = picam2.capture_array()
-
-        # Converte para BGR pois o preprocess_frame espera BGR para converter internamente
+        
+        # Converte para BGR para manter compatibilidade com o preprocess.py
         frame = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
         frame_count += 1
 
-        # 2. DEFINIÇÃO DO NOME DO ARQUIVO (CRUCIAL: Deve ficar aqui em cima!)
+        # -------------------------------------------------
+        # DEFINIÇÃO DO FILENAME (防 - À prova de falhas)
+        # -------------------------------------------------
+        # Criado logo no início para garantir que NENHUM cv2.imwrite quebre por NameError
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"img_{frame_count:05d}_{timestamp}.jpg"
 
-        # 3. PRÉ-PROCESSAMENTO & INFERÊNCIA
+        # -------------------------------------------------
+        # PRÉ-PROCESSAMENTO & INFERÊNCIA
+        # -------------------------------------------------
         tensor = preprocess_frame(frame)
 
         start_inf = time.time()
         output = predict(tensor)
         inference_time = time.time() - start_inf
 
-        # 4. PÓS-PROCESSAMENTO (Com o Threshold ajustado para a resposta do modelo)
+        # -------------------------------------------------
+        # PÓS-PROCESSAMENTO (Ajustado para o sinal de 0.20)
+        # -------------------------------------------------
         mask_raw = output.squeeze().cpu().numpy()
         
-        # Como o Log mostrou Valor Máx: 0.2519, mantemos o threshold baixo (0.15) para capturar o sinal
+        # Monitoramento no terminal
         print(f"[DEBUG MÁSCARA] Valor Máx: {mask_raw.max():.4f} | Valor Mín: {mask_raw.min():.4f}")
         
+        # Usando 0.15 como corte já que seu modelo bateu máx de 0.2099
         THRESHOLD = 0.15
         mask = (mask_raw > THRESHOLD).astype(np.uint8) * 255
 
-        # Redimensiona para resolução do frame original (640x480)
+        # Redimensiona mantendo os valores cravados (0 ou 255)
         mask_resized = cv2.resize(
             mask,
             (frame.shape[1], frame.shape[0]),
@@ -97,19 +102,24 @@ try:
         )
         mask_resized = mask_resized.astype(np.uint8)
 
-        # 5. OVERLAY (MÁSCARA VERDE)
+        # -------------------------------------------------
+        # GERAÇÃO DO OVERLAY (MÁSCARA VERDE)
+        # -------------------------------------------------
         mask_color = np.zeros_like(frame)
-        mask_color[:, :, 1] = mask_resized  # Aplica no canal Verde
+        mask_color[:, :, 1] = mask_resized  # Canal Verde
 
         overlay = cv2.addWeighted(frame, 0.7, mask_color, 0.3, 0)
 
-        # 6. CÁLCULO DE FPS & TELEMETRIA VISUAL
+        # -------------------------------------------------
+        # CÁLCULO DE TELEMETRIA & CÓPIA DE VISUALIZAÇÃO
+        # -------------------------------------------------
         now = time.time()
         fps = 1 / (now - prev)
         prev = now
 
-        # Cria uma cópia para colocar os textos na tela de exibição local
+        # Copia o overlay para desenhar o texto, mantendo o arquivo final limpo
         overlay_visualizacao = overlay.copy()
+        
         cv2.putText(
             overlay_visualizacao,
             f"FPS: {fps:.2f}",
@@ -129,25 +139,29 @@ try:
             2
         )
 
-        # 7. VISUALIZAÇÃO LOCAL
+        # Mostra na tela (Se houver monitor conectado ao Rasp)
         cv2.imshow("Overlay", overlay_visualizacao)
 
-        # 8. SALVAMENTO ORGANIZADO (Garante que todas as pastas usem o mesmo filename)
+        # -------------------------------------------------
+        # SALVAMENTO EM DISCO
+        # -------------------------------------------------
         if SAVE_IMAGES and frame_count % SAVE_EVERY_N_FRAMES == 0:
             
-            # Salva o frame original limpo (sem textos por cima)
+            # 1. Salva o frame original limpo (sem textos por cima)
             cv2.imwrite(os.path.join(DIRS["frame"], filename), frame)
 
-            # Salva a máscara pequena original 256x256
+            # 2. Salva a máscara pequena original 256x256
             cv2.imwrite(os.path.join(DIRS["mask"], f"raw_{filename}"), mask)
 
-            # Salva a máscara redimensionada de 640x480 limpa
+            # 3. Salva a máscara redimensionada de 640x480 limpa
             cv2.imwrite(os.path.join(DIRS["mask"], filename), mask_resized)
 
-            # Salva o overlay limpo
+            # 4. Salva o overlay limpo
             cv2.imwrite(os.path.join(DIRS["overlay"], filename), overlay)
 
-        # 9. LOGS DE EXECUÇÃO
+        # -------------------------------------------------
+        # SALVAMENTO DE LOGS
+        # -------------------------------------------------
         log_message = (
             f"[FRAME {frame_count}] "
             f"Inferência: {inference_time*1000:.1f} ms | "
@@ -158,14 +172,13 @@ try:
         with open(os.path.join(DIRS["logs"], "runtime.log"), "a") as log_file:
             log_file.write(log_message + "\n")
 
-        # 10. TECLA ESC PARA INTERRUPÇÃO MANUAL
+        # Tecla ESC para fechar manualmente
         key = cv2.waitKey(1)
         if key == 27:
             break
 
-
 # =========================================================
-# FINALIZAÇÃO DE RECURSOS
+# LIBERAÇÃO DE RECURSOS
 # =========================================================
 except KeyboardInterrupt:
     print("\n[INFO] Encerrando...")
