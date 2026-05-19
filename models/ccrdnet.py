@@ -6,7 +6,6 @@ class CustomCCRDNet(nn.Module):
     def __init__(self):
         super(CustomCCRDNet, self).__init__()
 
-        # Encoder
         self.enc1 = nn.Sequential(
             nn.Conv2d(3, 8, kernel_size=3, padding=1),
             nn.ReLU(),
@@ -23,13 +22,11 @@ class CustomCCRDNet(nn.Module):
 
         self.pool2 = nn.MaxPool2d(2, 2)
 
-        # Bottleneck
         self.bottleneck = nn.Sequential(
             nn.Conv2d(16, 32, kernel_size=3, padding=1),
             nn.ReLU()
         )
 
-        # Decoder
         self.up2 = nn.ConvTranspose2d(
             32,
             16,
@@ -54,7 +51,6 @@ class CustomCCRDNet(nn.Module):
             nn.ReLU()
         )
 
-        # Output
         self.final = nn.Conv2d(
             8,
             1,
@@ -75,11 +71,15 @@ class CustomCCRDNet(nn.Module):
 
         d2 = self.up2(b)
 
-        d2 = self.dec2(d2 + e2)
+        d2 = self.dec2(
+            d2 + e2
+        )
 
         d1 = self.up1(d2)
 
-        d1 = self.dec1(d1 + e1)
+        d1 = self.dec1(
+            d1 + e1
+        )
 
         return torch.sigmoid(
             self.final(d1)
