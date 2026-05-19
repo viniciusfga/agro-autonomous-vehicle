@@ -5,6 +5,8 @@ def process_output(output):
 
     mask = output.squeeze().cpu().numpy()
 
-    mask = (mask * 255).astype(np.uint8)
+    mask = (mask > 0.5).astype(np.uint8)
+
+    mask = mask * 255
 
     return mask
