@@ -89,7 +89,10 @@ try:
         # -------------------------------------------------
         # PÓS-PROCESSAMENTO (Correção do Resize)
         # -------------------------------------------------
-        mask = process_output(output)
+        mask_raw = output.squeeze().cpu().numpy()
+
+        THRESHOLD = 0.15
+        mask = (mask_raw > THRESHOLD).astype(np.uint8) * 255
 
         # Redimensiona mantendo os valores binários cravados (0 ou 255)
         mask_resized = cv2.resize(
