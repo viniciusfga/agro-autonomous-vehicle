@@ -39,8 +39,12 @@ while True:
         2
     )
 
-    cv2.imshow("frame", frame)
-    cv2.imshow("mask", mask)
+    cv2.imwrite("frame.jpg", frame)
+    cv2.imwrite("mask.jpg", mask)
+
+    print("imagens salvas")
+
+    break
 
     if cv2.waitKey(1) == 27:
         break
