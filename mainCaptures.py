@@ -23,18 +23,20 @@ DIRS = {
     "logs": os.path.join(BASE_DIR, "logs")
 }
 
-# Cria diretórios automaticamente
+# Cria diretórios
 for folder in DIRS.values():
     os.makedirs(folder, exist_ok=True)
 
 SAVE_IMAGES = True
-SAVE_EVERY_N_FRAMES = 1
+
+# Salva 1 a cada N frames
+SAVE_EVERY_N_FRAMES = 10
 
 # =========================================================
 # INICIALIZAÇÃO DA CÂMERA
 # =========================================================
 
-print("[INFO] Inicializando Picamera2...")
+print("[INFO] Inicializando câmera...")
 
 picam2 = Picamera2()
 
@@ -46,17 +48,19 @@ config = picam2.create_preview_configuration(
 )
 
 picam2.configure(config)
+
 picam2.start()
 
 time.sleep(2)
 
-print("[INFO] Câmera iniciada!")
+print("[INFO] Câmera iniciada.")
 
 # =========================================================
 # LOOP PRINCIPAL
 # =========================================================
 
 prev = time.time()
+
 frame_count = 0
 
 try:
@@ -77,12 +81,16 @@ try:
         frame_count += 1
 
         # -------------------------------------------------
-        # NOME PADRONIZADO
+        # NOME DO ARQUIVO
         # -------------------------------------------------
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime(
+            "%Y%m%d_%H%M%S"
+        )
 
-        filename = f"img_{frame_count:05d}_{timestamp}.jpg"
+        filename = (
+            f"img_{frame_count:05d}_{timestamp}.jpg"
+        )
 
         # -------------------------------------------------
         # PRÉ-PROCESSAMENTO
@@ -106,20 +114,16 @@ try:
 
         mask = process_output(output)
 
-        # Máscara original 256x256
-        raw_mask_path = os.path.join(
-            DIRS["mask"],
-            f"raw_{filename}"
-        )
-
-        # Resize para resolução original
+        # Resize máscara -> frame original
         mask_resized = cv2.resize(
             mask,
             (frame.shape[1], frame.shape[0]),
             interpolation=cv2.INTER_NEAREST
         )
 
-        mask_resized = mask_resized.astype(np.uint8)
+        mask_resized = mask_resized.astype(
+            np.uint8
+        )
 
         # -------------------------------------------------
         # OVERLAY
@@ -127,7 +131,7 @@ try:
 
         mask_color = np.zeros_like(frame)
 
-        # Verde
+        # Canal verde
         mask_color[:, :, 1] = mask_resized
 
         overlay = cv2.addWeighted(
@@ -149,7 +153,7 @@ try:
         prev = now
 
         # -------------------------------------------------
-        # TEXTO NA TELA
+        # TEXTO
         # -------------------------------------------------
 
         cv2.putText(
@@ -164,7 +168,7 @@ try:
 
         cv2.putText(
             overlay,
-            f"Inferencia: {inference_time*1000:.1f} ms",
+            f"INF: {inference_time*1000:.1f} ms",
             (10, 70),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
@@ -173,34 +177,35 @@ try:
         )
 
         # -------------------------------------------------
-        # VISUALIZAÇÃO
-        # -------------------------------------------------
-
-        cv2.imshow("Overlay", overlay)
-
-        # -------------------------------------------------
         # SALVAMENTO
         # -------------------------------------------------
 
-        if SAVE_IMAGES and frame_count % SAVE_EVERY_N_FRAMES == 0:
+        if (
+            SAVE_IMAGES and
+            frame_count % SAVE_EVERY_N_FRAMES == 0
+        ):
 
             cv2.imwrite(
-                os.path.join(DIRS["frame"], filename),
+                os.path.join(
+                    DIRS["frame"],
+                    filename
+                ),
                 frame
             )
 
             cv2.imwrite(
-                raw_mask_path,
-                mask
-            )
-
-            cv2.imwrite(
-                os.path.join(DIRS["mask"], filename),
+                os.path.join(
+                    DIRS["mask"],
+                    filename
+                ),
                 mask_resized
             )
 
             cv2.imwrite(
-                os.path.join(DIRS["overlay"], filename),
+                os.path.join(
+                    DIRS["overlay"],
+                    filename
+                ),
                 overlay
             )
 
@@ -210,41 +215,40 @@ try:
 
         log_message = (
             f"[FRAME {frame_count}] "
-            f"Inferência: {inference_time*1000:.1f} ms | "
+            f"INF: {inference_time*1000:.1f} ms | "
             f"FPS: {fps:.2f}"
         )
 
         print(log_message)
 
-        # Salva log em arquivo
         with open(
-            os.path.join(DIRS["logs"], "runtime.log"),
+            os.path.join(
+                DIRS["logs"],
+                "runtime.log"
+            ),
             "a"
         ) as log_file:
 
-            log_file.write(log_message + "\n")
+            log_file.write(
+                log_message + "\n"
+            )
 
-        # -------------------------------------------------
-        # TECLA ESC
-        # -------------------------------------------------
+# =========================================================
+# CTRL+C
+# =========================================================
 
-        key = cv2.waitKey(1)
+except KeyboardInterrupt:
 
-        if key == 27:
-            break
+    print("\n[INFO] Encerrando aplicação...")
 
 # =========================================================
 # FINALIZAÇÃO
 # =========================================================
 
-except KeyboardInterrupt:
-
-    print("\n[INFO] Encerrando...")
-
 finally:
 
     picam2.stop()
 
-    cv2.destroyAllWindows()
+    print("[INFO] Câmera parada.")
 
     print("[INFO] Recursos liberados.")
